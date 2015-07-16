@@ -1,10 +1,13 @@
 # Travis-ci pre-installed packages
 # http://docs.travis-ci.com/user/languages/python/#Pre-installed-packages=
+doit
 pytest
-nose
-mock
+pylint
+nose  # TODO: still required?
+mock  # TODO: still required?
 # Test dependencies
 PyYAML
+Pygments
 # Dependency links
 # see https://caremad.io/blog/setup-vs-requirement/
 -e .

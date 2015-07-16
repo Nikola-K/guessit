@@ -19,15 +19,19 @@
 #
 
 from __future__ import absolute_import, division, print_function, unicode_literals
+
+from pkg_resources import resource_stream  # @UnresolvedImport
+
 from guessit.patterns import build_or_pattern
 from guessit.containers import PropertiesContainer
 from guessit.plugins.transformers import Transformer
 from guessit.matcher import GuessFinder
-from pkg_resources import resource_stream  # @UnresolvedImport
+
 
 TLDS = [l.strip().decode('utf-8')
         for l in resource_stream('guessit', 'tlds-alpha-by-domain.txt').readlines()
         if b'--' not in l][1:]
+
 
 class GuessWebsite(Transformer):
     def __init__(self):

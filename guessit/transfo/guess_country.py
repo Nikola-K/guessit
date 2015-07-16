@@ -19,7 +19,8 @@
 #
 
 from __future__ import absolute_import, division, print_function, unicode_literals
-from guessit.options import options_list_callback
+
+import logging
 
 from guessit.plugins.transformers import Transformer
 from babelfish import Country
@@ -28,7 +29,7 @@ from guessit.textutils import iter_words
 from guessit.matcher import GuessFinder, found_guess
 from guessit.language import LNG_COMMON_WORDS
 import babelfish
-import logging
+
 
 log = logging.getLogger(__name__)
 
@@ -38,18 +39,19 @@ class GuessCountry(Transformer):
         Transformer.__init__(self, -170)
         self.replace_language = frozenset(['uk'])
 
-    def register_options(self, opts, naming_opts, output_opts, information_opts, webservice_opts, other_options):
-        naming_opts.add_option('-C', '--allowed-countries', type='string', action='callback', callback=options_list_callback, dest='allowed_countries', default=None,
-                               help='List of allowed countries. Separate country codes with ";"')
+    def register_arguments(self, opts, naming_opts, output_opts, information_opts, webservice_opts, other_options):
+        naming_opts.add_argument('-C', '--allowed-country', action='append', dest='allowed_countries',
+                                 help='Allowed country (can be used multiple times)')
 
     def supported_properties(self):
         return ['country']
 
     def should_process(self, mtree, options=None):
         options = options or {}
-        return 'nocountry' not in options.keys()
+        return options.get('country', True)
 
-    def _scan_country(self, country, strict=False):
+    @staticmethod
+    def _scan_country(country, strict=False):
         """
         Find a country if it is at the start or end of country string
         """
@@ -78,9 +80,10 @@ class GuessCountry(Transformer):
             except babelfish.Error:
                 continue
 
-        return Country.fromguessit(country), None
+        return Country.fromguessit(country), (start, end)
 
-    def is_valid_country(self, country, options=None):
+    @staticmethod
+    def is_valid_country(country, options=None):
         if options and options.get('allowed_countries'):
             allowed_countries = options.get('allowed_countries')
             return country.name.lower() in allowed_countries or country.alpha2.lower() in allowed_countries
@@ -90,7 +93,7 @@ class GuessCountry(Transformer):
 
     def guess_country(self, string, node=None, options=None):
         c = string.strip().lower()
-        if not c in LNG_COMMON_WORDS:
+        if c not in LNG_COMMON_WORDS:
             try:
                 country, country_span = self._scan_country(c, True)
                 if self.is_valid_country(country, options):

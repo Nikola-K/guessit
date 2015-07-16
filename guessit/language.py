@@ -20,13 +20,16 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from guessit import UnicodeMixin, base_text_type, u
-from guessit.textutils import find_words
-from babelfish import Language, Country
-import babelfish
 import re
 import logging
+
+from guessit import u
+from guessit.textutils import find_words
+
+from babelfish import Language, Country
+import babelfish
 from guessit.guess import Guess
+
 
 __all__ = ['Language', 'UNDETERMINED',
            'search_language', 'guess_language']
@@ -71,7 +74,8 @@ class GuessitConverter(babelfish.LanguageReverseConverter):
                 babelfish.country_converters['name'].codes |
                 frozenset(self.guessit_exceptions.keys()))
 
-    def convert(self, alpha3, country=None, script=None):
+    @staticmethod
+    def convert(alpha3, country=None, script=None):
         return str(babelfish.Language(alpha3, country, script))
 
     def reverse(self, name):
@@ -82,7 +86,7 @@ class GuessitConverter(babelfish.LanguageReverseConverter):
         if with_country:
             lang = Language.fromguessit(with_country.group(1).strip())
             lang.country = babelfish.Country.fromguessit(with_country.group(2).strip())
-            return (lang.alpha3, lang.country.alpha2 if lang.country else None, lang.script or None)
+            return lang.alpha3, lang.country.alpha2 if lang.country else None, lang.script or None
 
         # exceptions come first, as they need to override a potential match
         # with any of the other guessers
@@ -130,7 +134,8 @@ class GuessitCountryConverter(babelfish.CountryReverseConverter):
                 frozenset(babelfish.COUNTRIES.values()) |
                 frozenset(self.guessit_exceptions.keys()))
 
-    def convert(self, alpha2):
+    @staticmethod
+    def convert(alpha2):
         if alpha2 == 'GB':
             return 'UK'
         return str(Country(alpha2))
@@ -169,7 +174,7 @@ LNG_COMMON_WORDS = frozenset([
     'no', 'non', 'war', 'min', 'new', 'car', 'day', 'bad', 'bat', 'fan',
     'fry', 'cop', 'zen', 'gay', 'fat', 'one', 'cherokee', 'got', 'an', 'as',
     'cat', 'her', 'be', 'hat', 'sun', 'may', 'my', 'mr', 'rum', 'pi', 'bb', 'bt',
-    'tv', 'aw', 'by', 'md', 'mp', 'cd', 'lt', 'gt', 'in', 'ad',
+    'tv', 'aw', 'by', 'md', 'mp', 'cd', 'lt', 'gt', 'in', 'ad', 'ice', 'ay', 'at',
     # french words
     'bas', 'de', 'le', 'son', 'ne', 'ca', 'ce', 'et', 'que',
     'mal', 'est', 'vol', 'or', 'mon', 'se', 'je', 'tu', 'me',
@@ -177,7 +182,7 @@ LNG_COMMON_WORDS = frozenset([
     # japanese words,
     'wa', 'ga', 'ao',
     # spanish words
-    'la', 'el', 'del', 'por', 'mar',
+    'la', 'el', 'del', 'por', 'mar', 'al',
     # other
     'ind', 'arw', 'ts', 'ii', 'bin', 'chan', 'ss', 'san', 'oss', 'iii',
     'vi', 'ben', 'da', 'lt', 'ch',
@@ -234,7 +239,7 @@ def find_possible_languages(string, allowed_languages=None):
         for prefix in lang_prefixes:
             if lang_word.startswith(prefix):
                 lang_word = lang_word[len(prefix):]
-        if not lang_word in common_words:
+        if lang_word not in common_words:
             try:
                 lang = Language.fromguessit(lang_word)
                 if allowed_languages:
@@ -274,8 +279,8 @@ def search_language(string, allowed_languages=None):
 
         # only allow those languages that have a 2-letter code, those that
         # don't are too esoteric and probably false matches
-        #if language.lang not in lng3_to_lng2:
-        #    continue
+        # if language.lang not in lng3_to_lng2:
+        #     continue
 
         # confidence depends on alpha2, alpha3, english name, ...
         if len(lang) == 2:

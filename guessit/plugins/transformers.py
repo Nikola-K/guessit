@@ -19,13 +19,13 @@
 #
 
 from __future__ import absolute_import, division, print_function, unicode_literals
-from guessit.options import reload as reload_options
+from logging import getLogger
 
-from stevedore import ExtensionManager
 from pkg_resources import EntryPoint
 
+from guessit.options import reload as reload_options
+from stevedore import ExtensionManager
 from stevedore.extension import Extension
-from logging import getLogger
 
 log = getLogger(__name__)
 
@@ -54,7 +54,7 @@ class Transformer(object):  # pragma: no cover
     def post_process(self, mtree, options=None):
         pass
 
-    def register_options(self, opts, naming_opts, output_opts, information_opts, webservice_opts, other_options):
+    def register_arguments(self, opts, naming_opts, output_opts, information_opts, webservice_opts, other_options):
         pass
 
     def rate_quality(self, guess, *props):
@@ -63,17 +63,18 @@ class Transformer(object):  # pragma: no cover
 
 class CustomTransformerExtensionManager(ExtensionManager):
     def __init__(self, namespace='guessit.transformer', invoke_on_load=True,
-        invoke_args=(), invoke_kwds={}, propagate_map_exceptions=True, on_load_failure_callback=None,
+                 invoke_args=(), invoke_kwds={}, propagate_map_exceptions=True, on_load_failure_callback=None,
                  verify_requirements=False):
         super(CustomTransformerExtensionManager, self).__init__(namespace=namespace,
-                 invoke_on_load=invoke_on_load,
-                 invoke_args=invoke_args,
-                 invoke_kwds=invoke_kwds,
-                 propagate_map_exceptions=propagate_map_exceptions,
-                 on_load_failure_callback=on_load_failure_callback,
-                 verify_requirements=verify_requirements)
+                                                                invoke_on_load=invoke_on_load,
+                                                                invoke_args=invoke_args,
+                                                                invoke_kwds=invoke_kwds,
+                                                                propagate_map_exceptions=propagate_map_exceptions,
+                                                                on_load_failure_callback=on_load_failure_callback,
+                                                                verify_requirements=verify_requirements)
 
-    def order_extensions(self, extensions):
+    @staticmethod
+    def order_extensions(extensions):
         """Order the loaded transformers
 
         It should follow those rules
@@ -85,11 +86,18 @@ class CustomTransformerExtensionManager(ExtensionManager):
         extensions.sort(key=lambda ext: -ext.obj.priority)
         return extensions
 
-    def _load_one_plugin(self, ep, invoke_on_load, invoke_args, invoke_kwds, verify_requirements=True):
+    @staticmethod
+    def _load_one_plugin(ep, invoke_on_load, invoke_args, invoke_kwds, verify_requirements=True):
         if not ep.dist:
-            plugin = ep.load(require=False)
+            # `require` argument of ep.load() is deprecated in newer versions of setuptools
+            if hasattr(ep, 'resolve'):
+                plugin = ep.resolve()
+            elif hasattr(ep, '_load'):
+                plugin = ep._load()
+            else:
+                plugin = ep.load(require=False)
         else:
-            plugin = ep.load(require=verify_requirements)
+            plugin = ep.load()
         if invoke_on_load:
             obj = plugin(*invoke_args, **invoke_kwds)
         else:
@@ -102,7 +110,8 @@ class CustomTransformerExtensionManager(ExtensionManager):
     def objects(self):
         return self.map(self._get_obj)
 
-    def _get_obj(self, ext):
+    @staticmethod
+    def _get_obj(ext):
         return ext.obj
 
     def object(self, name):
@@ -184,6 +193,7 @@ def add_transformer(name, module_name, class_name):
     """
 
     _extensions.register_module(name, module_name, (class_name,))
+
 
 def add_transformer(entry_point):
     """

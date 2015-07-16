@@ -20,11 +20,14 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from guessit import UnicodeMixin, s, u, base_text_type
-from babelfish import Language, Country
 import json
 import datetime
 import logging
+
+from guessit import UnicodeMixin, s, u, base_text_type
+from babelfish import Language, Country
+from guessit.textutils import common_words
+
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +65,7 @@ class GuessMetadata(object):
         :rtype: int
         :return: confidence value
         """
-        return self._confidence if not self._confidence is None else self.parent.confidence if self.parent else None
+        return self._confidence if self._confidence is not None else self.parent.confidence if self.parent else None
 
     @confidence.setter
     def confidence(self, confidence):
@@ -75,7 +78,7 @@ class GuessMetadata(object):
         :rtype: string
         :return: String used to find this guess value
         """
-        return self._input if not self._input is None else self.parent.input if self.parent else None
+        return self._input if self._input is not None else self.parent.input if self.parent else None
 
     @input.setter
     def input(self, input):
@@ -92,7 +95,7 @@ class GuessMetadata(object):
         :rtype: tuple (int, int)
         :return: span of input string used to find this guess value
         """
-        return self._span if not self._span is None else self.parent.span if self.parent else None
+        return self._span if self._span is not None else self.parent.span if self.parent else None
 
     @span.setter
     def span(self, span):
@@ -110,7 +113,7 @@ class GuessMetadata(object):
         :rtype: :class:`_Property`
         :return: The property
         """
-        return self._prop if not self._prop is None else self.parent.prop if self.parent else None
+        return self._prop if self._prop is not None else self.parent.prop if self.parent else None
 
     @property
     def raw(self):
@@ -196,11 +199,11 @@ class Guess(UnicodeMixin, dict):
         FIXME: doc with param"""
         if advanced:
             data = self.to_dict(advanced)
-            return json.dumps(data, indent=4)
+            return json.dumps(data, indent=4, ensure_ascii=False)
         else:
             data = self.to_dict()
 
-            parts = json.dumps(data, indent=4).split('\n')
+            parts = json.dumps(data, indent=4, ensure_ascii=False).split('\n')
             for i, p in enumerate(parts):
                 if p[:5] != '    "':
                     continue
@@ -220,7 +223,7 @@ class Guess(UnicodeMixin, dict):
         """
         if prop is None:
             return self._global_metadata
-        if not prop in self._metadata:
+        if prop not in self._metadata:
             self._metadata[prop] = GuessMetadata(parent=self._global_metadata)
         return self._metadata[prop]
 
@@ -258,7 +261,7 @@ class Guess(UnicodeMixin, dict):
                     self._metadata[prop] = other._metadata[prop]
                 except KeyError:
                     pass
-        if not confidence is None:
+        if confidence is not None:
             for prop in other:
                 self.set_confidence(prop, confidence)
 
@@ -281,21 +284,21 @@ def choose_int(g1, g2):
     properties when they are integers."""
     v1, c1 = g1  # value, confidence
     v2, c2 = g2
-    if (v1 == v2):
-        return (v1, 1 - (1 - c1) * (1 - c2))
+    if v1 == v2:
+        return v1, 1 - (1 - c1) * (1 - c2)
     else:
         if c1 > c2:
-            return (v1, c1 - c2)
+            return v1, c1 - c2
         else:
-            return (v2, c2 - c1)
+            return v2, c2 - c1
 
 
 def choose_string(g1, g2):
     """Function used by merge_similar_guesses to choose between 2 possible
     properties when they are strings.
 
-    If the 2 strings are similar, or one is contained in the other, the latter is returned
-    with an increased confidence.
+    If the 2 strings are similar or have common words longer than 3 letters,
+    the one with highest confidence is returned with an increased confidence.
 
     If the 2 strings are dissimilar, the one with the higher confidence is returned, with
     a weaker confidence.
@@ -331,26 +334,30 @@ def choose_string(g1, g2):
     combined_prob = 1 - (1 - c1) * (1 - c2)
 
     if v1l == v2l:
-        return (v1, combined_prob)
+        return v1, combined_prob
 
     # check for common patterns
     elif v1l == 'the ' + v2l:
-        return (v1, combined_prob)
+        return v1, combined_prob
     elif v2l == 'the ' + v1l:
-        return (v2, combined_prob)
+        return v2, combined_prob
 
-    # if one string is contained in the other, return the shortest one
-    elif v2l in v1l:
-        return (v2, combined_prob)
-    elif v1l in v2l:
-        return (v1, combined_prob)
+    # If the 2 strings have common words longer than 3 letters,
+    # return the one with highest confidence.
+    commons = common_words(v1l, v2l)
+    for common_word in commons:
+        if len(common_word) > 3:
+            if c1 >= c2:
+                return v1, combined_prob
+            else:
+                return v2, combined_prob
 
     # in case of conflict, return the one with highest confidence
     else:
         if c1 > c2:
-            return (v1, c1 - c2)
+            return v1, c1 - c2
         else:
-            return (v2, c2 - c1)
+            return v2, c2 - c1
 
 
 def _merge_similar_guesses_nocheck(guesses, prop, choose):

@@ -19,8 +19,10 @@
 #
 
 from setuptools import setup, find_packages
+from setuptools.command.test import test as TestCommand
 
 import os
+import sys
 
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -28,9 +30,12 @@ README = open(os.path.join(here, 'README.rst')).read()
 HISTORY = open(os.path.join(here, 'HISTORY.rst')).read()
 
 
-install_requires = ['babelfish>=0.5.3', 'stevedore>=0.14', 'requests', 'python-dateutil>=2.1']
+install_requires = ['babelfish>=0.5.4', 'stevedore>=0.14', 'requests', 'python-dateutil>=2.1']
+if sys.version_info < (2, 7):
+    # argparse is part of the standard library in python 2.7+
+    install_requires.append('argparse')
 
-tests_require = ['PyYAML']  # Fabric not available (yet!) for python3
+tests_require = ['pytest', 'PyYAML']  # Fabric not available (yet!) for python3
 
 setup_requires = []
 
@@ -45,6 +50,24 @@ entry_points = {
 
 dependency_links = []
 
+
+class PyTest(TestCommand):
+    user_options = [('pytest-args=', 'a', "Arguments to pass to py.test")]
+
+    def initialize_options(self):
+        TestCommand.initialize_options(self)
+        self.pytest_args = []
+
+    def finalize_options(self):
+        TestCommand.finalize_options(self)
+        self.test_args = []
+
+    def run(self):
+        import pytest
+        errno = pytest.main(self.pytest_args)
+        exit(errno)
+
+
 exec(open("guessit/__version__.py").read())  # load version without importing guessit
 
 args = dict(name='guessit',
@@ -57,7 +80,6 @@ args = dict(name='guessit',
                          'Operating System :: OS Independent',
                          'Intended Audience :: Developers',
                          'Programming Language :: Python :: 2',
-                         'Programming Language :: Python :: 2.6',
                          'Programming Language :: Python :: 2.7',
                          'Programming Language :: Python :: 3',
                          'Programming Language :: Python :: 3.3',
@@ -72,6 +94,7 @@ args = dict(name='guessit',
             download_url='https://pypi.python.org/packages/source/g/guessit/guessit-%s.tar.gz' % __version__,
             license='LGPLv3',
             packages=find_packages(),
+            cmdclass={"test": PyTest},
             include_package_data=True,
             install_requires=install_requires,
             setup_requires=setup_requires,

@@ -20,14 +20,14 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import re
+
 from guessit.plugins.transformers import Transformer
-from guessit.options import options_list_callback
 from guessit.matcher import GuessFinder, build_guess
 from guessit.containers import PropertiesContainer
 from guessit.patterns import sep
 from guessit.guess import Guess
 from guessit.textutils import strip_brackets
-import re
 
 
 class GuessReleaseGroup(Transformer):
@@ -37,14 +37,15 @@ class GuessReleaseGroup(Transformer):
         self.container = PropertiesContainer(canonical_from_pattern=False)
         self._allowed_groupname_pattern = '[\w@#€£$&!\?]'
         self._forbidden_groupname_lambda = [lambda elt: elt in ['rip', 'by', 'for', 'par', 'pour', 'bonus'],
-                               lambda elt: self._is_number(elt),
-                               ]
+                                            lambda elt: self._is_number(elt)]
         # If the previous property in this list, the match will be considered as safe
         # and group name can contain a separator.
-        self.previous_safe_properties = ['videoCodec', 'format', 'videoApi', 'audioCodec', 'audioProfile', 'videoProfile', 'audioChannels', 'other']
+        self.previous_safe_properties = ['videoCodec', 'format', 'videoApi', 'audioCodec', 'audioProfile', 'videoProfile', 'audioChannels', 'screenSize', 'other']
         self.previous_safe_values = {'other': ['Complete']}
         self.next_safe_properties = ['extension', 'website']
         self.next_safe_values = {'format': ['Telesync']}
+        self.next_unsafe_properties = list(self.previous_safe_properties)
+        self.next_unsafe_properties.extend(['episodeNumber', 'season'])
         self.container.sep_replace_char = '-'
         self.container.canonical_from_pattern = False
         self.container.enhance = True
@@ -52,14 +53,15 @@ class GuessReleaseGroup(Transformer):
         self.container.register_property('releaseGroup', self._allowed_groupname_pattern + '+-' + self._allowed_groupname_pattern + '+')
         self.re_sep = re.compile('(' + sep + ')')
 
-    def register_options(self, opts, naming_opts, output_opts, information_opts, webservice_opts, other_options):
-        naming_opts.add_option('-G', '--expected-group', type='string', action='callback', callback=options_list_callback, dest='expected_group', default=None,
-                               help='List of expected groups to parse. Separate group names with ";"')
+    def register_arguments(self, opts, naming_opts, output_opts, information_opts, webservice_opts, other_options):
+        naming_opts.add_argument('-G', '--expected-group', action='append', dest='expected_group',
+                               help='Expected release group (can be used multiple times)')
 
     def supported_properties(self):
         return self.container.get_supported_properties()
 
-    def _is_number(self, s):
+    @staticmethod
+    def _is_number(s):
         try:
             int(s)
             return True
@@ -103,10 +105,11 @@ class GuessReleaseGroup(Transformer):
                 return True
         return False
 
-    def is_leaf_previous(self, leaf, node):
+    @staticmethod
+    def is_leaf_previous(leaf, node):
         if leaf.span[1] <= node.span[0]:
             for idx in range(leaf.span[1], node.span[0]):
-                if not leaf.root.value[idx] in sep:
+                if leaf.root.value[idx] not in sep:
                     return False
             return True
         return False
@@ -115,6 +118,16 @@ class GuessReleaseGroup(Transformer):
         if 'series' in node.root.info or 'title' in node.root.info:
             # --expected-series or --expected-title is used.
             return True
+
+        next_leaf = node.root.next_leaf(node)
+        node_idx = node.node_last_idx
+        while next_leaf and next_leaf.node_last_idx >= node_idx:
+            node_idx = next_leaf.node_last_idx
+            # Check next properties in the same group are not in unsafe properties list
+            for next_unsafe_property in self.next_unsafe_properties:
+                if next_unsafe_property in next_leaf.info:
+                    return False
+            next_leaf = next_leaf.root.next_leaf(next_leaf)
 
         # Make sure to avoid collision with 'series' or 'title' guessed later. Should be more precise.
         leaves = node.root.unidentified_leaves()
@@ -127,7 +140,7 @@ class GuessReleaseGroup(Transformer):
             return False
         if safe:
             for k, v in leaf.guess.items():
-                if k in self.previous_safe_values and not v in self.previous_safe_values[k]:
+                if k in self.previous_safe_values and v not in self.previous_safe_values[k]:
                     return False
         return True
 
